@@ -1279,6 +1279,10 @@ String @local
 //      ^^ storage.modifier.annotation
 //                  ^^^^^ keyword.control.flow.scala
 
+@obsolete("this class is horrible don't use it", alpha=3)
+//  ^^ storage.modifier.annotation
+//            ^ string
+//                                                     ^ constant.numeric.integer
 trait Function0[@specialized(Unit, Int, Double) T] {
 //               ^^ storage.modifier.annotation
 //                           ^^ storage.type.primitive
