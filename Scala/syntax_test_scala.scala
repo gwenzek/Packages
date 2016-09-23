@@ -1257,8 +1257,11 @@ for (
 
 // annotation examples from: http://www.scala-lang.org/files/archive/spec/2.11/11-annotations.html
 @deprecated("Use D", "1.0") class C { ... }
+// <- meta.annotation.scala
 // ^^ storage.modifier.annotation
 //            ^^ string
+//                        ^ meta.annotation.scala
+//                         ^ - meta.annotation.scala
 
 @transient @volatile var m: Int
 // ^^ storage.modifier.annotation
@@ -1275,6 +1278,7 @@ String @local
 // more complex:
 @scala.beans.BeanProperty
 //  ^^^^^^^^^^^^^^^^^^^^^ storage.modifier.annotation
+//    ^ punctuation.accessor.scala
 
 (e: Int @unchecked) match { ... }
 //  ^^ storage.type.primitive
