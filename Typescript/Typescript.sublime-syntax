@@ -6,70 +6,94 @@ name: TypeScript
 file_extensions:
   - ts
 scope: source.ts
+variables:
+  identifier: '([a-zA-Z_$][\w$]*)'
+
 contexts:
+  prototype:
+    - include: comments
   main:
     - include: shebang
     - include: expression
-  comment:
+  comments:
     - include: comment-block-doc
     - include: comment-block
     - include: comment-block-html
     - include: comment-line
+  or_pop:
+    - match: '(?!\s)'
+      pop: true
   block:
     - include: block-braces-curly
     - include: block-braces-round
     - include: block-braces-square
   block-braces-curly:
-    - match: '\{'
+    - match: '(=>)\s*(\{)'
       captures:
-        0: meta.brace.curly.ts
+        1: keyword.operator.arrow.ts
+        2: punctuation.section.function.begin.ts
       push:
-        - meta_scope: meta.expression.braces.curly
         - match: '\}'
+          scope: punctuation.section.function.end.ts
+          pop: true
+        - include: expression
+    - match: '\{'
+      scope: punctuation.section.dictionary.begin.ts
+      push:
+        - match: '{{identifier}}\s*(:)?'
           captures:
-            0: meta.brace.curly.ts
+            1: variable.parameter.dictionary.ts
+            2: punctuation.separator.key-value
+          push:
+            - match: '(?=,|\})'
+              pop: true
+            - include: expression
+        - match: ','
+          scope: punctuation.separator.key-value
+        - match: '\}'
+          scope: punctuation.section.dictionary.end.ts
           pop: true
         - include: expression
   block-braces-round:
     - match: \(
-      captures:
-        0: meta.brace.round.ts
+      scope: punctuation.definition.tuple.begin.ts
       push:
-        - meta_scope: meta.expression.braces.round
         - match: \)
-          captures:
-            0: meta.brace.round.ts
+          scope: punctuation.definition.tuple.end.ts
           pop: true
+        - match: '\b{{identifier}}\s*(:)'
+          captures:
+            1: storage.type.variable.ts
+            2: punctuation.separator.type.ts
+          push: type_expression
         - include: expression
   block-braces-square:
     - match: '\['
-      captures:
-        0: meta.brace.square.ts
+      scope: punctuation.definition.array.begin.ts
       push:
         - meta_scope: meta.expression.braces.square
         - match: '\]'
-          captures:
-            0: meta.brace.square.ts
+          scope: punctuation.definition.array.end.ts
           pop: true
         - include: expression
   class-expression:
-    - match: '\b(class|interface)\b(?:\s+([a-zA-Z_$][\w$]*))?'
+    - match: '\b(class|interface)\b(?:\s+{{identifier}})?\s*(\{)'
       captures:
         1: storage.type.ts storage.type.class.ts
         2: entity.name.class.ts
+        3: punctuation.definition.class.begin.ts
       push:
-        - meta_scope: meta.class.ts
-        - match: '(?=\})'
-          captures:
-            0: meta.brace.curly.ts
+        - match: '\}'
+          scope: punctuation.definition.class.end.ts
           pop: true
-        - include: comment
-        - include: meta-class-body
+        - include: meta-storage-modifier
+        - include: meta-class-member-attribute
+        - include: meta-class-member-method
         - include: expression
+
   comment-block:
     - match: /\*
-      captures:
-        0: punctuation.definition.comment.ts
+      scope: punctuation.definition.comment.ts
       push:
         - meta_scope: comment.block.ts
         - match: \*/
@@ -78,8 +102,7 @@ contexts:
           pop: true
   comment-block-doc:
     - match: /\*\*(?!/)
-      captures:
-        0: punctuation.definition.comment.ts
+      scope: punctuation.definition.comment.ts
       push:
         - meta_scope: comment.block.documentation.ts
         - match: \*/
@@ -102,7 +125,7 @@ contexts:
         - match: '([^\n\r"])'
           scope: punctuation.definition.comment.ts
   enum-expression:
-    - match: '\b(enum)\b(?:\s+([a-zA-Z_$][\w$]*))?'
+    - match: '\b(enum)\b(?:\s+{{identifier}})?'
       captures:
         1: storage.type.enum.ts
         2: entity.name.class.ts
@@ -112,10 +135,8 @@ contexts:
           captures:
             0: meta.brace.curly.ts
           pop: true
-        - include: comment
         - include: meta-enum-body
   expression:
-    - include: comment
     - include: module-expression
     - include: class-expression
     - include: enum-expression
@@ -123,27 +144,178 @@ contexts:
     - include: block
     - include: string
     - include: regexp
-    - include: misc-higlighting
-    - match: '([a-zA-Z_$][\w$]*)'
-      scope: variable.other.ts
-  function:
-    - include: meta-function-assignment
-    - include: meta-function-assignment-quoted
-    - include: meta-function
-  meta-class-body:
-    - match: '\{'
+    - include: casting
+    - include: if_block
+    - include: for_block
+    - match: '(var|const|let)\s+{{identifier}}'
       captures:
-        0: meta.brace.curly.ts
+        1: storage.type.variable.ts
+        2: variable.other.ts
       push:
-        - meta_scope: meta.expression.body.class
-        - match: '(?=\})'
+        - include: type_annotation
+        - match: '(?=[^:])'
           pop: true
-        - include: comment
-        - include: meta-storage-modifier
-        - include: meta-class-member-attribute
-        - include: meta-class-member-method
+    - match: '{{identifier}}(\()'
+      captures:
+        1: variable.function.ts
+        2: punctuation.definition.arguments.begin.ts
+      push:
+        - match: (?=\};)
+          pop: true;
+        - match: (\))
+          scope: punctuation.definition.arguments.end.ts
+          pop: true
+        - include: expression
+    - include: misc-higlighting
+    - match: '{{identifier}}'
+      scope: variable.other.ts
+
+  type_expression:
+    - meta_content_scope: debug_type_expression
+    - match: \s*
+    - match: \b(boolean|byte|char|double|float|int|long|number|short|string|void|any|undefined)\b
+      scope: support.type.ts
+      set: end_of_type_expression
+    - match: '{{identifier}}\.(?=\w)'
+      scope: variable.type.ts
+    - match: '{{identifier}}(\[\])?'
+      scope: variable.type.ts
+      set: end_of_type_expression
+    - match: \(
+      scope: punctuation.definition.parameters.begin.ts
+      set:
+        - match: \)
+          scope: punctuation.definition.parameters.end.ts
+          set: end_of_type_expression
+        - match: '{{identifier}}\s*(:)'
+          captures:
+            1: variable.parameter.function.ts
+            2: punctuation.separator.type.ts
+          push: type_expression
+        - match: ','
+          scope: keyword.operator.type.ts
+    - match: \[
+      scope: punctuation.type.begin.ts
+    - match: \]
+      scope: punctuation.type.end.ts
+      set: end_of_type_expression
+    - match: \{
+      scope: punctuation.definition.class.ts
+      set:
+        - match: '{{identifier}}\s*(:)'
+          captures:
+            1: variable.property.ts
+            2: punctuation.separator.key-value.ts
+          push: type_expression
+        - match: ';'
+          scope: punctuation.separator;
+        - match: \}
+          scope: punctuation.definition.class.ts
+          set: end_of_type_expression
+    - match: (?=\)|;|\}|>|,)
+      pop: true
+  end_of_type_expression:
+    - meta_content_scope: debug_type_expression.end
+    - match: '(\[\])'
+      scope: punctuation.ts
+    - match: '(<|\[)'
+      scope: punctuation.type.begin.ts
+      push: [type_expression-list, type_expression]
+    - match: '\s*(=>|\||&)\s*'
+      scope: keyword.operator.type.ts
+      set: type_expression
+    - match: '(?!=>|\||&)'
+      pop: true
+
+  type_expression-list:
+    - meta_content_scope: debug_type_expression.list
+    - match: ','
+      scope: punctuation.separator
+      push: type_expression
+    - match: '(>|\])'
+      scope: punctuation.type.end.ts
+      pop: true
+
+  casting:
+    - match: '<'
+      scope: punctuation
+      push:
+        - match: '>'
+          scope: punctuation
+          pop: true
+        - include: type_expression
+  if_block:
+    - match: '\b((else\s+)?if)\b\s*(\()'
+      captures:
+        1: keyword.control.conditional.ts
+        3: punctuation.section.conditional.begin.ts
+      push:
+        - meta_scope: debug.if
+        - match: '\)'
+          scope: punctuation.section.conditional.end.ts
+          set:
+            - match: '\{'
+              scope: punctuation.section.conditional.begin.ts
+              set:
+                - match: '\}'
+                  scope: punctuation.section.conditional.end.ts
+                  pop: true
+                - include: expression
+            - include: expression
+            - match: (?=\}|;|$)
+              pop: true
+        - include: expression
+        - match: '(?=\}|;)'
+          pop: true
+    - match: '\b(else)\b'
+      captures:
+        1: keyword.control.conditional.ts
+        2: punctuation.section.conditional.begin.ts
+      push:
+        - match: '\{'
+          scope: punctuation.section.conditional.begin.ts
+          set:
+            - match: '\}'
+              scope: punctuation.section.conditional.end.ts
+              pop: true
+            - include: expression
+        - match: (?=\}|;|$)
+          pop: true
+        - include: expression
+  for_block:
+    - match: '\b(for|while)\b\s*(\()'
+      captures:
+        1: keyword.control.loop.ts
+        2: punctuation.section.loop.begin.ts
+      push:
+        - meta_scope: debug.if
+        - match: '\)'
+          scope: punctuation.section.loop.end.ts
+          set:
+            - match: '\{'
+              scope: punctuation.section.loop.begin.ts
+              set:
+                - match: '\}'
+                  scope: punctuation.section.loop.end.ts
+                  pop: true
+                - include: expression
+            - include: expression
+            - match: (?=\}|;|$)
+              pop: true
+        - include: expression
+        - match: '(?=\}|;)'
+          pop: true
+
+  function:
+    - include: function_assignment
+    - match: '\b(function)\b\s*\b{{identifier}}?\b\s*'
+      captures:
+        1: storage.type.function.ts
+        2: entity.name.function.ts
+      push: [function_body_or_pop, type_annotation_or_pop, function_parameters_or_pop]
+
   meta-class-member-attribute:
-    - match: '\b([a-zA-Z_$][\w$]*)\s*(\?\s*)?(?=(=|:))'
+    - match: '\b{{identifier}}\s*(\?\s*)?(?=(=|:))'
       captures:
         1: meta.toc-list.class.member.ts
       push:
@@ -152,113 +324,94 @@ contexts:
           captures:
             1: punctuation.terminator.statement.ts
           pop: true
-        - include: meta-variable-type
+        - include: type_annotation
         - include: meta-variable-initializer
   meta-class-member-method:
-    - match: '\b(?:(get|set)\s+)?([a-zA-Z_$][\w$]*)\s*(?=\()'
+    - match: '\b(?:(get|set)\s+)?{{identifier}}\s*(?=\()'
       captures:
         1: storage.type.property.ts
         2: entity.name.function.ts
-      push:
-        - meta_scope: meta.class.member.ts
-        - match: '(\})|(;)'
-          captures:
-            1: meta.brace.curly.ts
-            2: punctuation.terminator.statement.ts
-          pop: true
-        - include: comment
-        - include: meta-function-parameters
-        - include: misc-higlighting
-        - include: meta-function-body
+      push: [function_body_or_pop, function_parameters_or_pop]
+
   meta-enum-assignedconstant:
     - match: (=)(?:\s*)
-      captures:
-        1: ""
       push:
         - meta_scope: meta.enum.assignment
         - match: '(?=[\s,}])'
           pop: true
-        - include: comment
         - include: expression
   meta-enum-body:
     - match: '\{'
-      captures:
-        0: meta.brace.curly.ts
+      scope: meta.brace.curly.ts
       push:
         - meta_scope: meta.expression.body.enum
         - match: '(?=\})'
           pop: true
-        - include: comment
         - include: meta-enum-constant
   meta-enum-constant:
-    - match: '([a-zA-Z_$][\w$]*)'
-      captures:
-        0: constant.character
+    - match: '{{identifier}}'
+      scope: constant.character
       push:
         - match: "(,)|(?=[}])"
           pop: true
-        - include: comment
         - include: meta-enum-assignedconstant
-  meta-function:
-    - match: '\b(function)(?:\s+([a-zA-Z_$][\w$]*))?\s*'
-      captures:
-        0: meta.function.ts
-        1: storage.type.function.ts
-        2: entity.name.function.ts
-      push:
-        - match: '(\})|(;)'
-          captures:
-            0: meta.brace.curly.ts
-          pop: true
-        - include: comment
-        - include: meta-function-parameters
-        - include: meta-function-body
-        - include: misc-higlighting
-  meta-function-assignment:
-    - match: '\b([a-zA-Z_$][\w$]*)\s*(?:(=)|:)\s*(?=(\bfunction\b))'
+
+  function_assignment:
+    - match: '\b{{identifier}}\s*(?:(=)|:)\s*(?=(\bfunction\b))'
       captures:
         1: entity.name.function.ts
         2: keyword.operator.ts
-  meta-function-assignment-quoted:
-    - match: '(?:(('')([^'']*)(''))|((")([^"]+)(")))\s*:\s*(?=\bfunction\b)'
+    - match: '(('')([^'']*)(''))\s*:\s*(?=\bfunction\b)'
       captures:
         1: string.quoted.single.ts
         2: punctuation.definition.string.begin.ts
         3: entity.name.function.ts
         4: punctuation.definition.string.end.ts
-        5: string.quoted.double.ts
-        6: punctuation.definition.string.begin.ts
-        7: entity.name.function.ts
-        8: punctuation.definition.string.end.ts
-  meta-function-body:
-    - match: '\{'
+    - match: '((")([^"]+)("))\s*:\s*(?=\bfunction\b)'
       captures:
-        0: meta.brace.curly.ts
+        1: string.quoted.double.ts
+        2: punctuation.definition.string.begin.ts
+        3: entity.name.function.ts
+        4: punctuation.definition.string.end.ts
+
+  function_body_or_pop:
+    - meta_scope: meta.function.ts
+    - match: '\{'
+      scope: punctuation.section.function.begin.ts
       push:
-        - meta_scope: meta.expression.body.function
-        - match: '(?=\})'
-          captures:
-            0: meta.brace.curly.ts
+        - meta_scope: meta.function.body.ts
+        - match: '\}'
+          scope: punctuation.section.function.end.ts
           pop: true
         - include: expression
-  meta-function-parameters:
-    - match: \(
-      captures:
-        0: punctuation.definition.parameters.begin.ts
+    - include: or_pop
+
+  function_parameters_or_pop:
+    - match: '<'
+      scope: punctuation.definition.parameters.begin.ts
       push:
-        - meta_scope: meta.expression.body.class
-        - match: \)
-          captures:
-            0: punctuation.definition.parameters.end.ts
-          pop: true
-        - include: comment
-        - include: meta-storage-modifier
-        - match: '[a-zA-Z_$][\w$]*'
+        - match: '{{identifier}}'
           scope: variable.parameter.function.ts
-        - include: meta-variable-type
+        - match: '>'
+          scope: punctuation.definition.parameters.end.ts
+          pop: true
+    - match: \(
+      scope: punctuation.definition.parameters.begin.ts
+      push:
+        - match: \)
+          scope: punctuation.definition.parameters.end.ts
+          pop: true
+        - match: ','
+          scope: punctuation.separator.parameters.ts
+        - include: meta-storage-modifier
+        - match: '{{identifier}}'
+          scope: variable.parameter.function.ts
+        - include: type_annotation
         - include: meta-variable-initializer
+    - include: or_pop
+
   meta-storage-modifier:
-    - match: \b(const|export|extends|final|implements|native|private|protected|public|static|synchronized|throws|transient|volatile)\b
+    - match: \b(const|export|extends|final|implements|native|private|protected|public|readonly|static|synchronized|throws|transient|volatile)\b
       scope: storage.modifier.ts
   meta-variable-initializer:
     - match: (=)
@@ -268,31 +421,35 @@ contexts:
         - match: "(?=[,);=])"
           pop: true
         - include: expression
-  meta-variable-type:
-    - match: ":"
-      push:
-        - match: "(?=[,);=])"
-          pop: true
-        - include: expression
+  type_annotation:
+    - match: ':'
+      scope: punctuation.separator.type.ts
+      push: type_expression
+  type_annotation_or_pop:
+    - include: type_annotation
+    - include: or_pop
+
   misc-higlighting:
     - match: '(new)\s+(\w+(?:\.[\w$]*)*)'
       scope: meta.class.instance.constructor
       captures:
         1: keyword.operator.new.ts
-        2: entity.name.type.instance.ts
+        2: variable.type.instance.ts
     - match: \b(console)\.(warn|info|log|error|time|timeEnd|assert)\b
       scope: meta.object.ts.firebug
       captures:
-        1: entity.name.type.object.ts.firebug
+        1: support.object.ts.firebug
         2: support.function.ts.firebug
     - match: \b(console)\b
-      scope: entity.name.type.object.ts.firebug
+      scope: support.object.ts.firebug
     - match: '\b((0(x|X)[0-9a-fA-F]+)|([0-9]+(\.[0-9]+)?))\b'
       scope: constant.numeric.ts
-    - match: \b(boolean|byte|char|class|double|enum|float|function|int|interface|long|number|short|string|var|let|void|type)\b
-      scope: storage.type.ts
+    - match: \b(boolean|byte|char|double|float|int|long|number|short|string|void)\b
+      scope: invalid.reserved.ts
+    - match: \b(class|enum|function|interface|type)\b
+      scope: storage.modifier.ts
     - include: meta-storage-modifier
-    - match: \b(break|case|catch|continue|declare|default|do|else|finally|for|goto|if|import|package|return|switch|throw|try|while)\b
+    - match: \b(break|case|catch|continue|declare|default|do|else|finally|for|goto|import|package|return|switch|throw|try|while)\b
       scope: keyword.control.ts
     - match: \b(delete|in|instanceof|new|typeof|with)\b
       scope: keyword.operator.ts
@@ -307,7 +464,7 @@ contexts:
     - match: (\.)(prototype|__proto__)\b
       scope: meta.prototype.ts
       captures:
-        1: meta.delimiter.method.period.ts
+        1: punctuation.accessor.ts
         2: support.constant.ts
     - match: \b(debugger)\b
       scope: keyword.other.ts
@@ -317,17 +474,23 @@ contexts:
       scope: support.function.ts
     - match: \b(s(h(ift|ow(Mod(elessDialog|alDialog)|Help))|croll(X|By(Pages|Lines)?|Y|To)?|t(op|rike)|i(n|zeToContent|debar|gnText)|ort|u(p|b(str(ing)?)?)|pli(ce|t)|e(nd|t(Re(sizable|questHeader)|M(i(nutes|lliseconds)|onth)|Seconds|Ho(tKeys|urs)|Year|Cursor|Time(out)?|Interval|ZOptions|Date|UTC(M(i(nutes|lliseconds)|onth)|Seconds|Hours|Date|FullYear)|FullYear|Active)|arch)|qrt|lice|avePreferences|mall)|h(ome|andleEvent)|navigate|c(har(CodeAt|At)|o(s|n(cat|textual|firm)|mpile)|eil|lear(Timeout|Interval)?|a(ptureEvents|ll)|reate(StyleSheet|Popup|EventObject))|t(o(GMTString|S(tring|ource)|U(TCString|pperCase)|Lo(caleString|werCase))|est|a(n|int(Enabled)?))|i(s(NaN|Finite)|ndexOf|talics)|d(isableExternalCapture|ump|etachEvent)|u(n(shift|taint|escape|watch)|pdateCommands)|j(oin|avaEnabled)|p(o(p|w)|ush|lugins.refresh|a(ddings|rse(Int|Float)?)|r(int|ompt|eference))|e(scape|nableExternalCapture|val|lementFromPoint|x(p|ec(Script|Command)?))|valueOf|UTC|queryCommand(State|Indeterm|Enabled|Value)|f(i(nd|le(ModifiedDate|Size|CreatedDate|UpdatedDate)|xed)|o(nt(size|color)|rward)|loor|romCharCode)|watch|l(ink|o(ad|g)|astIndexOf)|a(sin|nchor|cos|t(tachEvent|ob|an(2)?)|pply|lert|b(s|ort))|r(ou(nd|teEvents)|e(size(By|To)|calc|turnValue|place|verse|l(oad|ease(Capture|Events)))|andom)|g(o|et(ResponseHeader|M(i(nutes|lliseconds)|onth)|Se(conds|lection)|Hours|Year|Time(zoneOffset)?|Da(y|te)|UTC(M(i(nutes|lliseconds)|onth)|Seconds|Hours|Da(y|te)|FullYear)|FullYear|A(ttention|llResponseHeaders)))|m(in|ove(B(y|elow)|To(Absolute)?|Above)|ergeAttributes|a(tch|rgins|x))|b(toa|ig|o(ld|rderWidths)|link|ack))\b(?=\()
       scope: support.function.ts
-    - match: \b(s(ub(stringData|mit)|plitText|e(t(NamedItem|Attribute(Node)?)|lect))|has(ChildNodes|Feature)|namedItem|c(l(ick|o(se|neNode))|reate(C(omment|DATASection|aption)|T(Head|extNode|Foot)|DocumentFragment|ProcessingInstruction|E(ntityReference|lement)|Attribute))|tabIndex|i(nsert(Row|Before|Cell|Data)|tem)|open|delete(Row|C(ell|aption)|T(Head|Foot)|Data)|focus|write(ln)?|a(dd|ppend(Child|Data))|re(set|place(Child|Data)|move(NamedItem|Child|Attribute(Node)?)?)|get(NamedItem|Element(sBy(Name|TagName)|ById)|Attribute(Node)?)|blur)\b(?=\()
-      scope: support.function.dom.ts
-    - match: (?<=\.)(s(ystemLanguage|cr(ipts|ollbars|een(X|Y|Top|Left))|t(yle(Sheets)?|atus(Text|bar)?)|ibling(Below|Above)|ource|uffixes|e(curity(Policy)?|l(ection|f)))|h(istory|ost(name)?|as(h|Focus))|y|X(MLDocument|SLDocument)|n(ext|ame(space(s|URI)|Prop))|M(IN_VALUE|AX_VALUE)|c(haracterSet|o(n(structor|trollers)|okieEnabled|lorDepth|mp(onents|lete))|urrent|puClass|l(i(p(boardData)?|entInformation)|osed|asses)|alle(e|r)|rypto)|t(o(olbar|p)|ext(Transform|Indent|Decoration|Align)|ags)|SQRT(1_2|2)|i(n(ner(Height|Width)|put)|ds|gnoreCase)|zIndex|o(scpu|n(readystatechange|Line)|uter(Height|Width)|p(sProfile|ener)|ffscreenBuffering)|NEGATIVE_INFINITY|d(i(splay|alog(Height|Top|Width|Left|Arguments)|rectories)|e(scription|fault(Status|Ch(ecked|arset)|View)))|u(ser(Profile|Language|Agent)|n(iqueID|defined)|pdateInterval)|_content|p(ixelDepth|ort|ersonalbar|kcs11|l(ugins|atform)|a(thname|dding(Right|Bottom|Top|Left)|rent(Window|Layer)?|ge(X(Offset)?|Y(Offset)?))|r(o(to(col|type)|duct(Sub)?|mpter)|e(vious|fix)))|e(n(coding|abledPlugin)|x(ternal|pando)|mbeds)|v(isibility|endor(Sub)?|Linkcolor)|URLUnencoded|P(I|OSITIVE_INFINITY)|f(ilename|o(nt(Size|Family|Weight)|rmName)|rame(s|Element)|gColor)|E|whiteSpace|l(i(stStyleType|n(eHeight|kColor))|o(ca(tion(bar)?|lName)|wsrc)|e(ngth|ft(Context)?)|a(st(M(odified|atch)|Index|Paren)|yer(s|X)|nguage))|a(pp(MinorVersion|Name|Co(deName|re)|Version)|vail(Height|Top|Width|Left)|ll|r(ity|guments)|Linkcolor|bove)|r(ight(Context)?|e(sponse(XML|Text)|adyState))|global|x|m(imeTypes|ultiline|enubar|argin(Right|Bottom|Top|Left))|L(N(10|2)|OG(10E|2E))|b(o(ttom|rder(Width|RightWidth|BottomWidth|Style|Color|TopWidth|LeftWidth))|ufferDepth|elow|ackground(Color|Image)))\b
-      scope: support.constant.ts
-    - match: (?<=\.)(s(hape|ystemId|c(heme|ope|rolling)|ta(ndby|rt)|ize|ummary|pecified|e(ctionRowIndex|lected(Index)?)|rc)|h(space|t(tpEquiv|mlFor)|e(ight|aders)|ref(lang)?)|n(o(Resize|tation(s|Name)|Shade|Href|de(Name|Type|Value)|Wrap)|extSibling|ame)|c(h(ildNodes|Off|ecked|arset)?|ite|o(ntent|o(kie|rds)|de(Base|Type)?|l(s|Span|or)|mpact)|ell(s|Spacing|Padding)|l(ear|assName)|aption)|t(ype|Bodies|itle|Head|ext|a(rget|gName)|Foot)|i(sMap|ndex|d|m(plementation|ages))|o(ptions|wnerDocument|bject)|d(i(sabled|r)|o(c(type|umentElement)|main)|e(clare|f(er|ault(Selected|Checked|Value)))|at(eTime|a))|useMap|p(ublicId|arentNode|r(o(file|mpt)|eviousSibling))|e(n(ctype|tities)|vent|lements)|v(space|ersion|alue(Type)?|Link|Align)|URL|f(irstChild|orm(s)?|ace|rame(Border)?)|width|l(ink(s)?|o(ngDesc|wSrc)|a(stChild|ng|bel))|a(nchors|c(ce(ssKey|pt(Charset)?)|tion)|ttributes|pplets|l(t|ign)|r(chive|eas)|xis|Link|bbr)|r(ow(s|Span|Index)|ules|e(v|ferrer|l|adOnly))|m(ultiple|e(thod|dia)|a(rgin(Height|Width)|xLength))|b(o(dy|rder)|ackground|gColor))\b
-      scope: support.constant.dom.ts
+    - match: (\.)(s(ub(stringData|mit)|plitText|e(t(NamedItem|Attribute(Node)?)|lect))|has(ChildNodes|Feature)|namedItem|c(l(ick|o(se|neNode))|reate(C(omment|DATASection|aption)|T(Head|extNode|Foot)|DocumentFragment|ProcessingInstruction|E(ntityReference|lement)|Attribute))|tabIndex|i(nsert(Row|Before|Cell|Data)|tem)|open|delete(Row|C(ell|aption)|T(Head|Foot)|Data)|focus|write(ln)?|a(dd|ppend(Child|Data))|re(set|place(Child|Data)|move(NamedItem|Child|Attribute(Node)?)?)|get(NamedItem|Element(sBy(Name|TagName)|ById)|Attribute(Node)?)|blur)\b(?=\()
+      captures:
+        1: punctuation.accessor.ts
+        2: support.function.dom.ts
+    - match: (\.)(s(ystemLanguage|cr(ipts|ollbars|een(X|Y|Top|Left))|t(yle(Sheets)?|atus(Text|bar)?)|ibling(Below|Above)|ource|uffixes|e(curity(Policy)?|l(ection|f)))|h(istory|ost(name)?|as(h|Focus))|y|X(MLDocument|SLDocument)|n(ext|ame(space(s|URI)|Prop))|M(IN_VALUE|AX_VALUE)|c(haracterSet|o(n(structor|trollers)|okieEnabled|lorDepth|mp(onents|lete))|urrent|puClass|l(i(p(boardData)?|entInformation)|osed|asses)|alle(e|r)|rypto)|t(o(olbar|p)|ext(Transform|Indent|Decoration|Align)|ags)|SQRT(1_2|2)|i(n(ner(Height|Width)|put)|ds|gnoreCase)|zIndex|o(scpu|n(readystatechange|Line)|uter(Height|Width)|p(sProfile|ener)|ffscreenBuffering)|NEGATIVE_INFINITY|d(i(splay|alog(Height|Top|Width|Left|Arguments)|rectories)|e(scription|fault(Status|Ch(ecked|arset)|View)))|u(ser(Profile|Language|Agent)|n(iqueID|defined)|pdateInterval)|_content|p(ixelDepth|ort|ersonalbar|kcs11|l(ugins|atform)|a(thname|dding(Right|Bottom|Top|Left)|rent(Window|Layer)?|ge(X(Offset)?|Y(Offset)?))|r(o(to(col|type)|duct(Sub)?|mpter)|e(vious|fix)))|e(n(coding|abledPlugin)|x(ternal|pando)|mbeds)|v(isibility|endor(Sub)?|Linkcolor)|URLUnencoded|P(I|OSITIVE_INFINITY)|f(ilename|o(nt(Size|Family|Weight)|rmName)|rame(s|Element)|gColor)|E|whiteSpace|l(i(stStyleType|n(eHeight|kColor))|o(ca(tion(bar)?|lName)|wsrc)|e(ngth|ft(Context)?)|a(st(M(odified|atch)|Index|Paren)|yer(s|X)|nguage))|a(pp(MinorVersion|Name|Co(deName|re)|Version)|vail(Height|Top|Width|Left)|ll|r(ity|guments)|Linkcolor|bove)|r(ight(Context)?|e(sponse(XML|Text)|adyState))|global|x|m(imeTypes|ultiline|enubar|argin(Right|Bottom|Top|Left))|L(N(10|2)|OG(10E|2E))|b(o(ttom|rder(Width|RightWidth|BottomWidth|Style|Color|TopWidth|LeftWidth))|ufferDepth|elow|ackground(Color|Image)))\b
+      captures:
+        1: punctuation.accessor.ts
+        2: support.constant.ts
+    - match: (\.)(s(hape|ystemId|c(heme|ope|rolling)|ta(ndby|rt)|ize|ummary|pecified|e(ctionRowIndex|lected(Index)?)|rc)|h(space|t(tpEquiv|mlFor)|e(ight|aders)|ref(lang)?)|n(o(Resize|tation(s|Name)|Shade|Href|de(Name|Type|Value)|Wrap)|extSibling|ame)|c(h(ildNodes|Off|ecked|arset)?|ite|o(ntent|o(kie|rds)|de(Base|Type)?|l(s|Span|or)|mpact)|ell(s|Spacing|Padding)|l(ear|assName)|aption)|t(ype|Bodies|itle|Head|ext|a(rget|gName)|Foot)|i(sMap|ndex|d|m(plementation|ages))|o(ptions|wnerDocument|bject)|d(i(sabled|r)|o(c(type|umentElement)|main)|e(clare|f(er|ault(Selected|Checked|Value)))|at(eTime|a))|useMap|p(ublicId|arentNode|r(o(file|mpt)|eviousSibling))|e(n(ctype|tities)|vent|lements)|v(space|ersion|alue(Type)?|Link|Align)|URL|f(irstChild|orm(s)?|ace|rame(Border)?)|width|l(ink(s)?|o(ngDesc|wSrc)|a(stChild|ng|bel))|a(nchors|c(ce(ssKey|pt(Charset)?)|tion)|ttributes|pplets|l(t|ign)|r(chive|eas)|xis|Link|bbr)|r(ow(s|Span|Index)|ules|e(v|ferrer|l|adOnly))|m(ultiple|e(thod|dia)|a(rgin(Height|Width)|xLength))|b(o(dy|rder)|ackground|gColor))\b
+      captures:
+        1: punctuation.accessor.ts
+        2: support.constant.dom.ts
     - match: \b(ELEMENT_NODE|ATTRIBUTE_NODE|TEXT_NODE|CDATA_SECTION_NODE|ENTITY_REFERENCE_NODE|ENTITY_NODE|PROCESSING_INSTRUCTION_NODE|COMMENT_NODE|DOCUMENT_NODE|DOCUMENT_TYPE_NODE|DOCUMENT_FRAGMENT_NODE|NOTATION_NODE|INDEX_SIZE_ERR|DOMSTRING_SIZE_ERR|HIERARCHY_REQUEST_ERR|WRONG_DOCUMENT_ERR|INVALID_CHARACTER_ERR|NO_DATA_ALLOWED_ERR|NO_MODIFICATION_ALLOWED_ERR|NOT_FOUND_ERR|NOT_SUPPORTED_ERR|INUSE_ATTRIBUTE_ERR)\b
       scope: support.constant.dom.ts
-    - match: \bon(R(ow(s(inserted|delete)|e(nter|xit))|e(s(ize(start|end)?|et)|adystatechange))|Mouse(o(ut|ver)|down|up|move)|B(efore(cut|deactivate|u(nload|pdate)|p(aste|rint)|editfocus|activate)|lur)|S(croll|top|ubmit|elect(start|ionchange)?)|H(over|elp)|C(hange|ont(extmenu|rolselect)|ut|ellchange|l(ick|ose))|D(eactivate|ata(setc(hanged|omplete)|available)|r(op|ag(start|over|drop|en(ter|d)|leave)?)|blclick)|Unload|P(aste|ropertychange)|Error(update)?|Key(down|up|press)|Focus|Load|A(ctivate|fter(update|print)|bort))\b
+    - match: \.on(R(ow(s(inserted|delete)|e(nter|xit))|e(s(ize(start|end)?|et)|adystatechange))|Mouse(o(ut|ver)|down|up|move)|B(efore(cut|deactivate|u(nload|pdate)|p(aste|rint)|editfocus|activate)|lur)|S(croll|top|ubmit|elect(start|ionchange)?)|H(over|elp)|C(hange|ont(extmenu|rolselect)|ut|ellchange|l(ick|ose))|D(eactivate|ata(setc(hanged|omplete)|available)|r(op|ag(start|over|drop|en(ter|d)|leave)?)|blclick)|Unload|P(aste|ropertychange)|Error(update)?|Key(down|up|press)|Focus|Load|A(ctivate|fter(update|print)|bort))\b
       scope: support.function.event-handler.ts
-    - match: '!|\$|%|&|\*|\-\-|\-|\+\+|\+|~|===|==|=|!=|!==|<=|>=|<<=|>>=|>>>=|<>|<|>|!|&&|\|\||\?\:|\*=|(?<!\()/=|%=|\+=|\-=|&=|\^=|\b(in|instanceof|new|delete|typeof|void)\b'
+    - match: '\?|\$|%|\*|\-\-|\-|\+\+|\+|~|===|==|=>|!=|!==|<=|>=|!|<<=|>>=|>>>=|=|<>|<|>|!|&&|&|\|\||\?\:|\*=|(?<!\()/=|%=|\+=|\-=|&=|\^=|/|\b(in|instanceof|new|delete|typeof|of|as)\b'
       scope: keyword.operator.ts
     - match: \b(Infinity|NaN|undefined)\b
       scope: constant.language.ts
@@ -336,11 +499,9 @@ contexts:
     - match: ',[ |\t]*'
       scope: meta.delimiter.object.comma.ts
     - match: \.
-      scope: meta.delimiter.method.period.ts
-    - match: '\[|\]'
-      scope: meta.brace.square.ts
+      scope: punctuation.accessor.ts
   module-expression:
-    - match: '\b(module)\b(?:\s+([a-zA-Z_$][\w$]*))?'
+    - match: '\b(module)\b(?:\s+{{identifier}})?'
       captures:
         1: storage.type.module.ts
         2: entity.name.type.module.ts
@@ -352,14 +513,13 @@ contexts:
           pop: true
         - include: expression
   regexp:
-    - match: '(?<=[=(:]|^|return|&&|\|\||!)\s*(/)(?![/*+{}?])'
+    - match: '\s*(/)(?=[^/*+{}?]*/[igm]*\b)'
       captures:
         1: punctuation.definition.string.begin.ts
       push:
         - meta_scope: string.regexp.ts
-        - match: "(/)[igm]*"
-          captures:
-            1: punctuation.definition.string.end.ts
+        - match: '(/)[igm]*'
+          scope: punctuation.definition.string.end.ts
           pop: true
         - match: \\.
           scope: constant.character.escape.ts
@@ -379,59 +539,54 @@ contexts:
     - include: string-quoted-double-in-oneline-comment
   string-quoted-double:
     - match: '"'
-      captures:
-        0: punctuation.definition.string.begin.ts
+      scope: punctuation.definition.string.begin.ts
       push:
+        - meta_include_prototype: false
         - meta_scope: string.quoted.double.ts
         - match: '"'
-          captures:
-            0: punctuation.definition.string.end.ts
+          scope: punctuation.definition.string.end.ts
           pop: true
         - include: string-hex-escape
   string-quoted-double-in-oneline-comment:
     - match: '"'
-      captures:
-        0: punctuation.definition.string.begin.ts
+      scope: punctuation.definition.string.begin.ts
       push:
+        - meta_include_prototype: false
         - meta_scope: comment.string.quoted.double.ts
         - match: '"|[\n]'
-          captures:
-            0: punctuation.definition.string.end.ts
+          scope: punctuation.definition.string.end.ts
           pop: true
         - include: string-hex-escape
   string-quoted-single:
     - match: "'"
-      captures:
-        0: punctuation.definition.string.begin.ts
+      scope: punctuation.definition.string.begin.ts
       push:
+        - meta_include_prototype: false
         - meta_scope: string.quoted.single.ts
         - match: "'"
-          captures:
-            0: punctuation.definition.string.end.ts
+          scope: punctuation.definition.string.end.ts
           pop: true
         - include: string-hex-escape
   string-quoted-single-in-oneline-comment:
     - match: "'"
-      captures:
-        0: punctuation.definition.string.begin.ts
+      scope: punctuation.definition.string.begin.ts
       push:
+        - meta_include_prototype: false
         - meta_scope: comment.string.quoted.single.ts
         - match: |-
             '|[
             ]
-          captures:
-            0: punctuation.definition.string.end.ts
+          scope: punctuation.definition.string.end.ts
           pop: true
         - include: string-hex-escape
   string-templatestring:
     - match: "`"
-      captures:
-        0: punctuation.definition.string.begin.ts
+      scope: punctuation.definition.string.begin.ts
       push:
+        - meta_include_prototype: false
         - meta_scope: support.other.ts meta.templatestring.ts
         - match: "`"
-          captures:
-            0: punctuation.definition.string.end.ts
+          scope: punctuation.definition.string.end.ts
           pop: true
         - include: string-templatestring-replacement
         - include: string-hex-escape
@@ -443,6 +598,7 @@ contexts:
         1: keyword.operator.ts
         2: meta.brace.curly.ts keyword.operator.ts
       push:
+        - meta_include_prototype: false
         - meta_scope: support.other.ts meta.templatestring.replacement.ts
         - match: '\}'
           captures:
