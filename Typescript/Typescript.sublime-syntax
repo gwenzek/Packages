@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 # http://www.sublimetext.com/docs/3/syntax.html
-# Converted from https://github.com/lavrton/sublime-better-typescript/blob/master/TypeScript.tmLanguage
+# Converted from https://raw.githubusercontent.com/Phaiax/ArcticTypescript/master/theme/Typescript.tmLanguage
 name: TypeScript
 file_extensions:
   - ts
@@ -55,8 +55,8 @@ contexts:
   class-expression:
     - match: '\b(class|interface)\b(?:\s+([a-zA-Z_$][\w$]*))?'
       captures:
-        1: storage.type.class.ts
-        2: entity.name.type.class.ts
+        1: storage.type.ts storage.type.class.ts
+        2: entity.name.class.ts
       push:
         - meta_scope: meta.class.ts
         - match: '(?=\})'
@@ -93,21 +93,39 @@ contexts:
         0: punctuation.definition.comment.html.js
         2: punctuation.definition.comment.html.js
   comment-line:
-    - match: |-
-        (//).*$
-        ?
-      scope: comment.line.double-slash.ts
+    - match: (//)
+      push:
+        - meta_scope: comment.line.double-slash.ts
+        - match: $\n?
+          pop: true
+        - include: string-in-oneline-comment
+        - match: '([^\n\r"])'
+          scope: punctuation.definition.comment.ts
+  enum-expression:
+    - match: '\b(enum)\b(?:\s+([a-zA-Z_$][\w$]*))?'
       captures:
-        1: punctuation.definition.comment.ts
+        1: storage.type.enum.ts
+        2: entity.name.class.ts
+      push:
+        - meta_scope: meta.class.ts
+        - match: '(?=\})'
+          captures:
+            0: meta.brace.curly.ts
+          pop: true
+        - include: comment
+        - include: meta-enum-body
   expression:
     - include: comment
     - include: module-expression
     - include: class-expression
+    - include: enum-expression
     - include: function
     - include: block
     - include: string
     - include: regexp
     - include: misc-higlighting
+    - match: '([a-zA-Z_$][\w$]*)'
+      scope: variable.other.ts
   function:
     - include: meta-function-assignment
     - include: meta-function-assignment-quoted
@@ -125,10 +143,11 @@ contexts:
         - include: meta-class-member-attribute
         - include: meta-class-member-method
   meta-class-member-attribute:
-    - match: '\b([a-zA-Z_$][\w$]*)\s*(?=(=|:))'
+    - match: '\b([a-zA-Z_$][\w$]*)\s*(\?\s*)?(?=(=|:))'
       captures:
         1: meta.toc-list.class.member.ts
       push:
+        - meta_scope: meta.expression.classattribute
         - match: (;)
           captures:
             1: punctuation.terminator.statement.ts
@@ -151,6 +170,35 @@ contexts:
         - include: meta-function-parameters
         - include: misc-higlighting
         - include: meta-function-body
+  meta-enum-assignedconstant:
+    - match: (=)(?:\s*)
+      captures:
+        1: ""
+      push:
+        - meta_scope: meta.enum.assignment
+        - match: '(?=[\s,}])'
+          pop: true
+        - include: comment
+        - include: expression
+  meta-enum-body:
+    - match: '\{'
+      captures:
+        0: meta.brace.curly.ts
+      push:
+        - meta_scope: meta.expression.body.enum
+        - match: '(?=\})'
+          pop: true
+        - include: comment
+        - include: meta-enum-constant
+  meta-enum-constant:
+    - match: '([a-zA-Z_$][\w$]*)'
+      captures:
+        0: constant.character
+      push:
+        - match: "(,)|(?=[}])"
+          pop: true
+        - include: comment
+        - include: meta-enum-assignedconstant
   meta-function:
     - match: '\b(function)(?:\s+([a-zA-Z_$][\w$]*))?\s*'
       captures:
@@ -241,7 +289,7 @@ contexts:
       scope: entity.name.type.object.ts.firebug
     - match: '\b((0(x|X)[0-9a-fA-F]+)|([0-9]+(\.[0-9]+)?))\b'
       scope: constant.numeric.ts
-    - match: \b(boolean|byte|char|class|double|enum|float|function|int|interface|long|number|short|string|var|void)\b
+    - match: \b(boolean|byte|char|class|double|enum|float|function|int|interface|long|number|short|string|var|let|void|type)\b
       scope: storage.type.ts
     - include: meta-storage-modifier
     - match: \b(break|case|catch|continue|declare|default|do|else|finally|for|goto|if|import|package|return|switch|throw|try|while)\b
@@ -255,7 +303,7 @@ contexts:
     - match: \bnull\b
       scope: constant.language.null.ts
     - match: \b(super|this)\b
-      scope: support.constant.ts
+      scope: variable.language.ts
     - match: (\.)(prototype|__proto__)\b
       scope: meta.prototype.ts
       captures:
@@ -322,6 +370,13 @@ contexts:
   string:
     - include: string-quoted-single
     - include: string-quoted-double
+    - include: string-templatestring
+  string-hex-escape:
+    - match: '\\(x\h{2}|[0-2][0-7]{,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.)'
+      scope: constant.character.escape.ts
+  string-in-oneline-comment:
+    - include: string-quoted-single-in-oneline-comment
+    - include: string-quoted-double-in-oneline-comment
   string-quoted-double:
     - match: '"'
       captures:
@@ -332,8 +387,18 @@ contexts:
           captures:
             0: punctuation.definition.string.end.ts
           pop: true
-        - match: '\\(x\h{2}|[0-2][0-7]{,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.)'
-          scope: constant.character.escape.ts
+        - include: string-hex-escape
+  string-quoted-double-in-oneline-comment:
+    - match: '"'
+      captures:
+        0: punctuation.definition.string.begin.ts
+      push:
+        - meta_scope: comment.string.quoted.double.ts
+        - match: '"|[\n]'
+          captures:
+            0: punctuation.definition.string.end.ts
+          pop: true
+        - include: string-hex-escape
   string-quoted-single:
     - match: "'"
       captures:
@@ -344,5 +409,43 @@ contexts:
           captures:
             0: punctuation.definition.string.end.ts
           pop: true
-        - match: '\\(x\h{2}|[0-2][0-7]{,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.)'
-          scope: constant.character.escape.ts
+        - include: string-hex-escape
+  string-quoted-single-in-oneline-comment:
+    - match: "'"
+      captures:
+        0: punctuation.definition.string.begin.ts
+      push:
+        - meta_scope: comment.string.quoted.single.ts
+        - match: |-
+            '|[
+            ]
+          captures:
+            0: punctuation.definition.string.end.ts
+          pop: true
+        - include: string-hex-escape
+  string-templatestring:
+    - match: "`"
+      captures:
+        0: punctuation.definition.string.begin.ts
+      push:
+        - meta_scope: support.other.ts meta.templatestring.ts
+        - match: "`"
+          captures:
+            0: punctuation.definition.string.end.ts
+          pop: true
+        - include: string-templatestring-replacement
+        - include: string-hex-escape
+        - match: "([^`])"
+          scope: string.quoted.other
+  string-templatestring-replacement:
+    - match: '(\$)(\{)'
+      captures:
+        1: keyword.operator.ts
+        2: meta.brace.curly.ts keyword.operator.ts
+      push:
+        - meta_scope: support.other.ts meta.templatestring.replacement.ts
+        - match: '\}'
+          captures:
+            0: meta.brace.curly.ts keyword.operator.ts
+          pop: true
+        - include: expression
